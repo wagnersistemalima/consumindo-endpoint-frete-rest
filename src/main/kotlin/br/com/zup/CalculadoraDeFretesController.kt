@@ -1,8 +1,12 @@
 package br.com.zup
 
+import io.grpc.Status
+import io.grpc.StatusRuntimeException
+import io.micronaut.http.HttpStatus
 import io.micronaut.http.annotation.Controller
 import io.micronaut.http.annotation.Get
 import io.micronaut.http.annotation.QueryValue
+import io.micronaut.http.exceptions.HttpStatusException
 import org.slf4j.LoggerFactory
 import javax.inject.Inject
 
@@ -26,10 +30,25 @@ class CalculadoraDeFretesController(@Inject val gRpcClient: FretesServiceGrpc.Fr
          depois que fazemos a configuração,temos que chamá-lo para que haja a requisição
          e o recebimento da resposta*/
         logger.info("Realizando a chamada para o microserviço frete")
-        val response = gRpcClient.calculaFrete(request)
 
-        logger.info("Resposta obtida com sucesso da api frete, retornando ao cliente")
-        return FreteResponse(cep = response.cep, valor = response.valor)
+        try{
+            val response = gRpcClient.calculaFrete(request)
+            logger.info("Resposta obtida com sucesso da api frete, retornando ao cliente")
+            return FreteResponse(cep = response.cep, valor = response.valor)
+        }
+        catch (e: StatusRuntimeException) {
+
+            val statusCode = e.status.code
+            val description = e.status.description
+
+            if (statusCode == Status.Code.INTERNAL) {
+                logger.warn("erro interno no servidor externo ${e.message}")
+                throw  HttpStatusException(HttpStatus.INTERNAL_SERVER_ERROR, description)
+            }
+            logger.warn("erro de validação no serviço externo ${e.message}")
+            throw HttpStatusException(HttpStatus.BAD_REQUEST, e.message)
+        }
+
     }
 }
 
